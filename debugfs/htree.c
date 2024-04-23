@@ -334,7 +334,7 @@ void do_dx_hash(int argc, char *argv[], int sci_idx EXT2FS_ATTR((unused)),
 {
 	ext2_dirhash_t hash, minor_hash;
 	errcode_t	err;
-	int		c;
+	int		c, verbose = 0;
 	int		hash_version = 0;
 	__u32		hash_seed[4] = { 0, };
 	int		hash_flags = 0;
@@ -347,10 +347,13 @@ void do_dx_hash(int argc, char *argv[], int sci_idx EXT2FS_ATTR((unused)),
 		hash_seed[3] = current_fs->super->s_hash_seed[3];
 
 		hash_version = current_fs->super->s_def_hash_version;
+		if (hash_version <= EXT2_HASH_TEA &&
+		    current_fs->super->s_flags & EXT2_FLAGS_UNSIGNED_HASH)
+			hash_version += 3;
 	}
 
 	reset_getopt();
-	while ((c = getopt(argc, argv, "h:s:ce:")) != EOF) {
+	while ((c = getopt(argc, argv, "h:s:ce:v")) != EOF) {
 		switch (c) {
 		case 'h':
 			hash_version = e2p_string2hash(optarg);
@@ -375,14 +378,17 @@ void do_dx_hash(int argc, char *argv[], int sci_idx EXT2FS_ATTR((unused)),
 				return;
 			}
 			break;
+		case 'v':
+			verbose = 1;
+			break;
 		default:
 			goto print_usage;
 		}
 	}
 	if (optind != argc-1) {
 	print_usage:
-		com_err(argv[0], 0, "usage: dx_hash [-h hash_alg] "
-			"[-s hash_seed] [-c] [-e encoding] filename");
+		com_err(argv[0], 0, "usage: dx_hash [-cv] [-h hash_alg] "
+			"[-s hash_seed] [-e encoding] filename");
 		return;
 	}
 	err = ext2fs_dirhash2(hash_version, argv[optind],
@@ -395,6 +401,13 @@ void do_dx_hash(int argc, char *argv[], int sci_idx EXT2FS_ATTR((unused)),
 	}
 	printf("Hash of %s is 0x%0x (minor 0x%0x)\n", argv[optind],
 	       hash, minor_hash);
+	if (verbose) {
+		char uuid_str[37];
+
+		uuid_unparse((__u8 *) hash_seed, uuid_str);
+		printf("  using hash algorithm %d and hash_seed %s\n",
+		       hash_version, uuid_str);
+	}
 }
 
 /*
