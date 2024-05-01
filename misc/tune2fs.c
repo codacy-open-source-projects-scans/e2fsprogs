@@ -3097,7 +3097,7 @@ static int handle_fslabel(int setlabel)
 	errcode_t ret;
 	int mnt_flags, fd;
 	char label[FSLABEL_MAX];
-	int maxlen = FSLABEL_MAX - 1;
+	unsigned int maxlen = FSLABEL_MAX - 1;
 	char mntpt[PATH_MAX + 1];
 
 	ret = ext2fs_check_mount_point(device_name, &mnt_flags,
@@ -3445,7 +3445,7 @@ _("Warning: The journal is dirty. You may wish to replay the journal like:\n\n"
 		goto closefs;
 	}
 	if (T_flag) {
-		sb->s_lastcheck = last_check_time;
+		ext2fs_set_tstamp(sb, s_lastcheck, last_check_time);
 		ext2fs_mark_super_dirty(fs);
 		printf(_("Setting time filesystem last checked to %s\n"),
 		       ctime(&last_check_time));

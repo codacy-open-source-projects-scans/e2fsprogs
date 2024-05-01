@@ -51,7 +51,7 @@ static int (*dl_archive_read_open_filename)(struct archive *,
 static int (*dl_archive_read_support_filter_all)(struct archive *);
 static int (*dl_archive_read_support_format_all)(struct archive *);
 
-#ifdef HAVE_DLOPEN
+#ifdef CONFIG_DLOPEN_LIBARCHIVE
 #include <dlfcn.h>
 
 static void *libarchive_handle;
@@ -237,7 +237,7 @@ static int remove_inode(ext2_filsys fs, ext2_ino_t ino)
 		return 0; /* XXX: already done? */
 	case 1:
 		inode.i_links_count--;
-		inode.i_dtime = fs->now ? fs->now : time(0);
+		ext2fs_set_dtime(fs, EXT2_INODE(&inode));
 		break;
 	default:
 		inode.i_links_count--;
@@ -352,7 +352,6 @@ static errcode_t do_write_internal_tar(ext2_filsys fs, ext2_ino_t cwd,
 	ext2_ino_t newfile;
 	errcode_t retval;
 	struct ext2_inode inode;
-	char *cp;
 
 	retval = ext2fs_new_inode(fs, cwd, 010755, 0, &newfile);
 	if (retval)
@@ -547,7 +546,7 @@ static errcode_t handle_entry(ext2_filsys fs, ext2_ino_t root_ino,
 
 errcode_t __populate_fs_from_tar(ext2_filsys fs, ext2_ino_t root_ino,
 				 const char *source_tar, ext2_ino_t root,
-				 struct hdlinks_s *hdlinks,
+				 struct hdlinks_s *hdlinks EXT2FS_ATTR((unused)),
 				 struct file_info *target,
 				 struct fs_ops_callbacks *fs_callbacks)
 {

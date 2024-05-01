@@ -222,6 +222,11 @@ typedef struct ext2_file *ext2_file_t;
 #define EXT2_FLAG_IGNORE_SWAP_DIRENT	0x8000000
 
 /*
+ * Internal flags for use by the ext2fs library only
+ */
+#define EXT2_FLAG2_USE_FAKE_TIME	0x000000001
+
+/*
  * Special flag in the ext2 inode i_flag field that means that this is
  * a new inode.  (So that ext2_write_inode() can clear extra fields.)
  */
@@ -275,10 +280,11 @@ struct struct_ext2_filsys {
 	int				cluster_ratio_bits;
 	__u16				default_bitmap_type;
 	__u16				pad;
+	__u32				flags2;
 	/*
 	 * Reserved for future expansion
 	 */
-	__u32				reserved[5];
+	__u32				reserved[4];
 
 	/*
 	 * Reserved for the use of the calling application.
@@ -584,7 +590,8 @@ static inline __u32 __encode_extra_time(time_t seconds, __u32 nsec)
 	__u32 extra = 0;
 
 #if (SIZEOF_TIME_T > 4)
-	extra = ((seconds - (__s32)seconds) >> 32) & EXT4_EPOCH_MASK;
+	extra = ((seconds - (__s32)(seconds & 0xffffffff)) >> 32) &
+		EXT4_EPOCH_MASK;
 #endif
 	return extra | (nsec << EXT4_EPOCH_BITS);
 }
@@ -600,17 +607,17 @@ static inline __u32 __decode_extra_nsec(__u32 extra)
 {
 	return (extra & EXT4_NSEC_MASK) >> EXT4_EPOCH_BITS;
 }
-#define ext2fs_inode_actual_size(inode)				      \
-	(EXT2_GOOD_OLD_INODE_SIZE +					      \
-	 (sizeof(*inode) > EXT2_GOOD_OLD_INODE_SIZE ?			      \
-		((struct ext2_inode_large *)(inode))->i_extra_isize : 0))
+#define ext2fs_inode_actual_size(inode)					      \
+	((size_t)(EXT2_GOOD_OLD_INODE_SIZE +				      \
+		  (sizeof(*inode) > EXT2_GOOD_OLD_INODE_SIZE ?		      \
+		   ((struct ext2_inode_large *)(inode))->i_extra_isize : 0)))
 #define clamp(val, min, max) ((val) < (min) ? (min) : ((val) > (max) ?	      \
 						       (max) : (val)))
 #define ext2fs_inode_xtime_set(inode, field, sec)			      \
 do {									      \
 	if (ext2fs_inode_includes(ext2fs_inode_actual_size(inode),	      \
 				  field ## _extra)) {			      \
-		(inode)->field = (__s32)sec;				      \
+		(inode)->field = (__s32)(sec & 0xfffffff);		      \
 		((struct ext2_inode_large *)(inode))->field ## _extra =       \
 			__encode_extra_time(sec, 0);			      \
 	} else {							      \
@@ -627,7 +634,7 @@ static inline void __sb_set_tstamp(__u32 *lo, __u8 *hi, time_t seconds)
 {
 	*lo = seconds & 0xffffffff;
 #if (SIZEOF_TIME_T > 4)
-	*hi = seconds >> 32;
+	*hi = (seconds >> 32) & EXT4_EPOCH_MASK;
 #else
 	*hi = 0;
 #endif
@@ -1558,6 +1565,9 @@ errcode_t ext2fs_count_used_blocks(ext2_filsys fs, blk64_t start,
 extern unsigned int ext2fs_list_backups(ext2_filsys fs, unsigned int *three,
 				unsigned int *five, unsigned int *seven);
 
+/* getenv.c */
+extern char *ext2fs_safe_getenv(const char *arg);
+
 /* get_num_dirs.c */
 extern errcode_t ext2fs_get_num_dirs(ext2_filsys fs, ext2_ino_t *ret_num_dirs);
 
@@ -2289,6 +2299,30 @@ static inline unsigned int ext2_dir_htree_level(ext2_filsys fs)
 		return EXT4_HTREE_LEVEL;
 
 	return EXT4_HTREE_LEVEL_COMPAT;
+}
+
+/*
+ * We explicitly decided not to reserve space for a 64-bit dtime,
+ * since it's never displayed or exposed to userspace.  The dtime
+ * field is used a linked list for the ophan list, and for forensic
+ * purposes when trying to determine when an inode was deleted.  So
+ * right after the 2038 epoch, a deleted inode might end up with a
+ * dtime which is zero or smaller than the number of inodes, which
+ * will result in e2fsck reporting a potential problems.  So when we
+ * set the dtime, make sure that the dtime won't be mistaken for an
+ * inode number.
+ */
+static inline void ext2fs_set_dtime(ext2_filsys fs, struct ext2_inode *inode)
+{
+	__u32	t;
+
+	if (fs->now || (fs->flags2 & EXT2_FLAG2_USE_FAKE_TIME))
+		t = fs->now & 0xFFFFFFFF;
+	else
+		t = time(NULL) & 0xFFFFFFFF;
+	if (t < fs->super->s_inodes_count)
+		t = fs->super->s_inodes_count;
+	inode->i_dtime = t;
 }
 
 #ifdef __cplusplus

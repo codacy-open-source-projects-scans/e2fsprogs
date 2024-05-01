@@ -348,7 +348,7 @@ static int release_orphan_inode(e2fsck_t ctx, ext2_ino_t *ino, char *block_buf)
 		ext2fs_inode_alloc_stats2(fs, *ino, -1,
 					  LINUX_S_ISDIR(inode.i_mode));
 		ctx->free_inodes++;
-		inode.i_dtime = ctx->now;
+		ext2fs_set_dtime(fs, EXT2_INODE(&inode));
 	} else {
 		inode.i_dtime = 0;
 	}
@@ -1323,7 +1323,7 @@ void check_super_block(e2fsck_t ctx)
 	    (ext2fs_get_tstamp(fs->super, s_mtime) > ctx->now)) {
 		pctx.num = ext2fs_get_tstamp(fs->super, s_mtime);
 		problem = PR_0_FUTURE_SB_LAST_MOUNT;
-		if (pctx.num <= ctx->now + ctx->time_fudge)
+		if ((time_t) pctx.num <= ctx->now + ctx->time_fudge)
 			problem = PR_0_FUTURE_SB_LAST_MOUNT_FUDGED;
 		if (fix_problem(ctx, problem, &pctx)) {
 			ext2fs_set_tstamp(fs->super, s_mtime, ctx->now);
@@ -1335,7 +1335,7 @@ void check_super_block(e2fsck_t ctx)
 	    (ext2fs_get_tstamp(fs->super, s_wtime) > ctx->now)) {
 		pctx.num = ext2fs_get_tstamp(fs->super, s_wtime);
 		problem = PR_0_FUTURE_SB_LAST_WRITE;
-		if (pctx.num <= ctx->now + ctx->time_fudge)
+		if ((time_t) pctx.num <= ctx->now + ctx->time_fudge)
 			problem = PR_0_FUTURE_SB_LAST_WRITE_FUDGED;
 		if (fix_problem(ctx, problem, &pctx)) {
 			ext2fs_set_tstamp(fs->super, s_wtime, ctx->now);
